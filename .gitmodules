@@ -1,0 +1,3 @@
+[submodule "vendors/hnswlib"]
+	path = vendors/hnswlib
+	url = git@github.com:chroma-core/hnswlib.git
