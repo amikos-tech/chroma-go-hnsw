@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"unsafe"
 )
 
@@ -26,89 +28,123 @@ const (
 	COSINE Space = iota
 )
 
-type Option func(index *HNSWIndexConfig) error
+type OptionNew func(index *HNSWIndexConfig) error
+type LoadIndexOption func(index *HNSWIndexConfig) error
 
-// WithSpace sets the space for the index
-func WithSpace(space Space) Option {
+// WithSpaceNew sets the space for a new index
+func WithSpaceNew(space Space) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.Space = space
 		return nil
 	}
 }
 
-// WithDimension sets the dimension for the index
-func WithDimension(dimension int) Option {
+// WithDimensionNew sets the dimension for a new index
+func WithDimensionNew(dimension int) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.Dimension = dimension
 		return nil
 	}
 }
 
-// WithMaxElements sets the max elements for the index
-func WithMaxElements(maxElements int) Option {
+// WithMaxElementsNew sets the max elements for a new index
+func WithMaxElementsNew(maxElements uint64) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.MaxElements = maxElements
 		return nil
 	}
 }
 
-// WithM sets the M for the index
-func WithM(m int) Option {
+// WithMaxElementsLoad sets the max elements for an existing index
+func WithMaxElementsLoad(maxElements uint64) LoadIndexOption {
+	return func(index *HNSWIndexConfig) error {
+		index.MaxElements = maxElements
+		return nil
+	}
+}
+
+// WithMNew sets the M for a new index
+func WithMNew(m uint64) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.M = m
 		return nil
 	}
 }
 
-// WithEFConstruction sets the efConstruction for the index
-func WithEFConstruction(efConstruction int) Option {
+// WithEFConstructionNew sets the efConstruction for a new index
+func WithEFConstructionNew(efConstruction uint64) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.EFConstruction = efConstruction
 		return nil
 	}
 }
 
-// WithPersistLocation sets the persistLocation for the index
-func WithPersistLocation(persistLocation string) Option {
+// WithPersistLocationNew sets the persistLocation for a new index
+func WithPersistLocationNew(persistLocation string) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.PersistLocation = persistLocation
 		return nil
 	}
 }
 
-// WithEFSearch sets the default ef for the index. This is applied to all searches that do not specify an ef
-func WithEFSearch(efSearch int) Option {
+// WithPersistLocationLoad sets the persistLocation for an existing index
+func WithPersistLocationLoad(persistLocation string) LoadIndexOption {
+	return func(index *HNSWIndexConfig) error {
+		index.PersistLocation = persistLocation
+		return nil
+	}
+}
+
+// WithEFSearchNew sets the default ef for a new index. This is applied to all searches that do not specify an ef
+func WithEFSearchNew(efSearch uint64) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.EfSearch = efSearch
 		return nil
 	}
 }
 
-// WithNumThreads sets the number of threads for the index
-func WithNumThreads(numThreads int) Option {
+// WithEFSearchLoad sets the default ef for an existing index. This is applied to all searches that do not specify an ef
+func WithEFSearchLoad(efSearch uint64) LoadIndexOption {
+	return func(index *HNSWIndexConfig) error {
+		index.EfSearch = efSearch
+		return nil
+	}
+}
+
+// WithNumThreadsNew sets the number of threads for a new index
+func WithNumThreadsNew(numThreads uint64) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.NumThreads = numThreads
 		return nil
 	}
 }
 
-// WithAllowReplaceDeleted sets the allowReplaceDeleted for the index
-func WithAllowReplaceDeleted(allowReplaceDeleted bool) Option {
+// WithNumThreadsLoad sets the number of threads for an existing index
+func WithNumThreadsLoad(numThreads uint64) LoadIndexOption {
+	return func(index *HNSWIndexConfig) error {
+		index.NumThreads = numThreads
+		return nil
+	}
+}
+
+// WithAllowReplaceDeletedNew sets the allowReplaceDeleted for a new index
+func WithAllowReplaceDeletedNew(allowReplaceDeleted bool) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.AllowReplaceDeleted = allowReplaceDeleted
 		return nil
 	}
 }
 
-// WithReadOnly sets the readOnly for the index
-func WithReadOnly(readOnly bool) Option {
+// WithReadOnlyLoad sets the readOnly for an existing index
+func WithReadOnlyLoad(readOnly bool) LoadIndexOption {
 	return func(index *HNSWIndexConfig) error {
 		index.ReadOnly = readOnly
 		return nil
 	}
 }
 
-func WithResizeFactor(resizeFactor float32) Option {
+// WithResizeFactorNew sets the resize factor for a new index
+func WithResizeFactorNew(resizeFactor float32) OptionNew {
 	return func(index *HNSWIndexConfig) error {
 		index.ResizeFactor = resizeFactor
 		return nil
@@ -117,20 +153,21 @@ func WithResizeFactor(resizeFactor float32) Option {
 
 // HNSWIndex is a Go struct that holds a reference to the C++ HNSWIndex
 type HNSWIndex struct {
-	config *HNSWIndexConfig
-	index  *C.HNSWIndex
+	config      *HNSWIndexConfig
+	index       *C.HNSWIndex
+	initialized bool
 }
 
 type HNSWIndexConfig struct {
 	Space               Space   `json:"space"`
 	Dimension           int     `json:"dimension"`
 	Normalize           bool    `json:"normalize"`
-	MaxElements         int     `json:"maxElements"`
-	M                   int     `json:"m"`
-	EFConstruction      int     `json:"efConstruction"`
+	MaxElements         uint64  `json:"maxElements"`
+	M                   uint64  `json:"m"`
+	EFConstruction      uint64  `json:"efConstruction"`
 	PersistLocation     string  `json:"-"`
-	EfSearch            int     `json:"efSearch"`
-	NumThreads          int     `json:"numThreads"`
+	EfSearch            uint64  `json:"efSearch"`
+	NumThreads          uint64  `json:"numThreads"`
 	PersistOnWrite      bool    `json:"persistOnWrite"`
 	AllowReplaceDeleted bool    `json:"allowReplaceDeleted"`
 	ReadOnly            bool    `json:"readOnly"`
@@ -138,17 +175,7 @@ type HNSWIndexConfig struct {
 }
 
 // NewIndex creates a new HNSWIndex
-func NewIndex(opts ...Option) (*HNSWIndex, error) {
-
-	//config := &C.HNSWIndexConfig{
-	//	space:            C.L2,
-	//	dimension:        C.int(dim),
-	//	max_elements:     C.int(maxElements),
-	//	M:                C.int(M),
-	//	ef_construction:  C.int(efConstruction),
-	//	persist_location: C.CString("./index"),
-	//}
-
+func NewIndex(opts ...OptionNew) (*HNSWIndex, error) {
 	internalConfig := &HNSWIndex{
 		config: &HNSWIndexConfig{
 			Space:               L2,
@@ -157,11 +184,13 @@ func NewIndex(opts ...Option) (*HNSWIndex, error) {
 			EFConstruction:      100,
 			EfSearch:            10,
 			MaxElements:         1000,
-			PersistOnWrite:      false,
+			PersistOnWrite:      true,
 			AllowReplaceDeleted: false,
 			ReadOnly:            false,
 			ResizeFactor:        1.2,
-		}}
+			NumThreads:          uint64(runtime.NumCPU()),
+		},
+	}
 
 	for _, opt := range opts {
 		err := opt(internalConfig.config)
@@ -171,7 +200,7 @@ func NewIndex(opts ...Option) (*HNSWIndex, error) {
 	}
 	if internalConfig.config.PersistLocation != "" {
 		if _, err := os.Stat(internalConfig.config.PersistLocation); os.IsNotExist(err) {
-			err := os.MkdirAll(internalConfig.config.PersistLocation, os.ModePerm)
+			err := os.MkdirAll(internalConfig.config.PersistLocation, 0750)
 			if err != nil {
 				return nil, err
 			}
@@ -209,25 +238,52 @@ func (h *HNSWIndex) dumpConfig() error {
 	}
 	return nil
 }
-func LoadHNSWIndex(persistLocation string) (*HNSWIndex, error) {
-	if _, err := os.Stat(persistLocation); os.IsNotExist(err) {
+
+func LoadHNSWIndex(space Space, dimensions int, opts ...LoadIndexOption) (*HNSWIndex, error) {
+	config := &HNSWIndexConfig{
+		Space:               space,
+		Normalize:           false,
+		PersistOnWrite:      false,
+		AllowReplaceDeleted: false,
+		ReadOnly:            false,
+		Dimension:           dimensions,
+	}
+	for _, opt := range opts {
+		err := opt(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := os.Stat(config.PersistLocation); os.IsNotExist(err) {
 		return nil, fmt.Errorf("error: persist location does not exist")
 	}
 	// read the config file
 
-	configFile, err := os.Open(filepath.Join(persistLocation, "config.json"))
+	index := &HNSWIndex{
+		config: config,
+	}
+	cconfig, err := getCConfig(index)
 	if err != nil {
 		return nil, err
 	}
-	defer configFile.Close()
-
-	decoder := json.NewDecoder(configFile)
-	var config HNSWIndexConfig
-	if err := decoder.Decode(&config); err != nil {
+	index.index = C.create_index(cconfig)
+	defer func() {
+		err := index.dumpConfig()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
+	if !index.initialized {
+		C.init_index(index.index)
+		index.initialized = true
+	}
+	newCfg, err := loadCConfig(index)
+	if err != nil {
 		return nil, err
 	}
-
-	return nil, nil
+	index.config = newCfg
+	return index, nil
 }
 
 func getCConfig(index *HNSWIndex) (*C.HNSWIndexConfig, error) {
@@ -237,13 +293,29 @@ func getCConfig(index *HNSWIndex) (*C.HNSWIndexConfig, error) {
 	}
 	return &C.HNSWIndexConfig{
 		space:                 cSpace,
-		dimension:             C.int(index.config.Dimension),
-		max_elements:          C.int(index.config.MaxElements),
-		M:                     C.int(index.config.M),
-		ef_construction:       C.int(index.config.EFConstruction),
+		dimension:             C.size_t(index.config.Dimension),
+		max_elements:          C.size_t(index.config.MaxElements),
+		M:                     C.size_t(index.config.M),
+		ef_construction:       C.size_t(index.config.EFConstruction),
 		persist_location:      C.CString(index.config.PersistLocation),
 		persist_on_write:      C.bool(index.config.PersistOnWrite),
 		allow_replace_deleted: C.bool(index.config.AllowReplaceDeleted),
+	}, nil
+}
+
+func loadCConfig(index *HNSWIndex) (*HNSWIndexConfig, error) {
+	if index.index == nil {
+		return nil, fmt.Errorf("index is nil")
+	}
+	return &HNSWIndexConfig{
+		Space:               Space(index.index.config.space),
+		Dimension:           int(index.index.config.dimension),
+		MaxElements:         uint64(index.index.config.max_elements),
+		M:                   uint64(index.index.config.M),
+		EFConstruction:      uint64(index.index.config.ef_construction),
+		PersistLocation:     C.GoString(index.index.config.persist_location),
+		PersistOnWrite:      bool(index.index.config.persist_on_write),
+		AllowReplaceDeleted: bool(index.index.config.allow_replace_deleted),
 	}, nil
 }
 
@@ -261,6 +333,10 @@ func getCSpace(space Space) (C.enum_Space, error) {
 }
 
 func (h *HNSWIndex) AddEmbeddings(data [][]float32, ids []uint64) error {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	if h.config.ReadOnly {
 		return fmt.Errorf("index is read only")
 	}
@@ -341,47 +417,96 @@ func (h *HNSWIndex) AddEmbeddings(data [][]float32, ids []uint64) error {
 
 // Close frees the HNSWIndex
 func (h *HNSWIndex) Close() {
+	if !h.initialized {
+		return
+	}
 	C.free_index(h.index)
 }
 
 func (h *HNSWIndex) GetIDs() []uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	// Get the number of elements
 	numElements := uint64(C.get_current_count(h.index))
-	ids := make([]uint64, numElements)
 	if numElements == 0 {
-		return ids
+		return []uint64{}
 	}
+
+	// Allocate memory for labels
 	labels := (*C.label_type)(C.malloc(C.size_t(numElements) * C.size_t(unsafe.Sizeof(C.label_type(0)))))
 	defer C.free(unsafe.Pointer(labels))
 
 	C.get_ids_list(h.index, labels)
-	for i := uint64(0); i < numElements; i++ {
-		// Get pointer to the i-th element
-		ptr := unsafe.Pointer(uintptr(unsafe.Pointer(labels)) + uintptr(i)*unsafe.Sizeof(C.label_type(0)))
-		// Convert to label_type and then to int
-		ids[i] = uint64(*(*C.label_type)(ptr))
-	}
 
+	ids := make([]uint64, numElements)
+	cLabels := (*[1 << 30]C.label_type)(unsafe.Pointer(labels))[:numElements:numElements]
+	for i, label := range cLabels {
+		ids[i] = uint64(label)
+	}
+	return ids
+}
+
+func (h *HNSWIndex) GetActiveIDs() []uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
+	// Get the number of elements
+	numElements := h.GetActiveCount()
+
+	// Allocate memory for labels
+	labels := (*C.label_type)(C.malloc(C.size_t(numElements) * C.size_t(unsafe.Sizeof(C.label_type(0)))))
+	defer C.free(unsafe.Pointer(labels))
+
+	C.get_active_ids_list(h.index, labels)
+
+	ids := make([]uint64, numElements)
+	cLabels := (*[1 << 30]C.label_type)(unsafe.Pointer(labels))[:numElements:numElements]
+	for i, label := range cLabels {
+		ids[i] = uint64(label)
+	}
 	return ids
 }
 
 func (h *HNSWIndex) GetElementCount() uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	return uint64(C.get_current_count(h.index))
 }
 
 func (h *HNSWIndex) GetActiveCount() uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	return uint64(C.get_current_count(h.index)) - uint64(C.get_deleted_count(h.index))
 }
 
 func (h *HNSWIndex) GetDeletedCount() uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	return uint64(C.get_deleted_count(h.index))
 }
 
 func (h *HNSWIndex) GetMaxElements() uint64 {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	return uint64(C.get_max_elements(h.index))
 }
 
 func (h *HNSWIndex) Resize(newSize uint64) error {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	if h.config.ReadOnly {
 		return fmt.Errorf("index is read only")
 	}
@@ -393,6 +518,10 @@ func (h *HNSWIndex) Resize(newSize uint64) error {
 }
 
 func (h *HNSWIndex) DeleteEmbeddings(ids []uint64) error {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	if h.config.ReadOnly {
 		return fmt.Errorf("index is read only")
 	}
@@ -418,9 +547,226 @@ func (h *HNSWIndex) DeleteEmbeddings(ids []uint64) error {
 }
 
 func (h *HNSWIndex) Persist() error {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
 	if h.config.ReadOnly {
 		return fmt.Errorf("index is read only")
 	}
 	C.persist_dirty(h.index)
 	return nil
+}
+
+type Embedding []float32
+
+type HNSWIndexQuery struct {
+	embeddings []*Embedding
+	k          uint64
+	filterIDs  []uint64
+	ef         uint64
+}
+
+type HNSWIndexQueryResult struct {
+}
+
+type QueryOption func(query *HNSWIndexQuery) error
+
+func WithFilterIDs(filterIDs []uint64) QueryOption {
+	return func(query *HNSWIndexQuery) error {
+		query.filterIDs = filterIDs
+		return nil
+	}
+}
+
+func WithEF(ef uint64) QueryOption {
+	return func(query *HNSWIndexQuery) error {
+		query.ef = ef
+		return nil
+	}
+}
+
+var currentFilter func(int) bool
+
+//export goFilterWrapper
+func goFilterWrapper(label C.label_type) C.bool {
+	return C.bool(currentFilter(int(label)))
+}
+
+func createKNNQueryRequestGo(k, numThreads, count, dims int, filter func(label int) bool, embeddings []float32) *C.KNNQueryRequest {
+	// Allocate memory for query embeddings
+	cEmbeddings := (*C.float)(C.malloc(C.size_t(len(embeddings)) * C.size_t(unsafe.Sizeof(C.float(0)))))
+	embeddingSlice := (*[1 << 30]C.float)(unsafe.Pointer(cEmbeddings))[:len(embeddings):len(embeddings)]
+	if cEmbeddings == nil {
+		fmt.Println("Failed to allocate memory for embeddings")
+		return nil
+	}
+	// Copy the embeddings into the allocated C memory
+	for i, val := range embeddings {
+		embeddingSlice[i] = C.float(val)
+	}
+	currentFilter = filter
+
+	// Create the KNNQueryRequest struct
+	request := &C.KNNQueryRequest{
+		k:               C.size_t(k),
+		num_threads:     C.size_t(numThreads),
+		count:           C.size_t(count),
+		dims:            C.size_t(dims),
+		filter_function: (C.FilterFunction)(C.goFilterWrapper),
+		queryEmbeddings: cEmbeddings,
+	}
+
+	return request
+}
+
+func freeKNNQueryRequest(request *C.KNNQueryRequest) {
+	fmt.Println("REQ", request.queryEmbeddings)
+	if request.queryEmbeddings != nil {
+		C.free(unsafe.Pointer(request.queryEmbeddings))
+	}
+	C.free(unsafe.Pointer(request))
+}
+
+func toRawSlice(data [][]float32) []float32 {
+	if len(data) == 0 || len(data[0]) == 0 {
+		return nil
+	}
+	// Get the pointer to the first element of the first slice
+	ptr := unsafe.Pointer(&data[0][0])
+
+	// Calculate total length of the raw data
+	totalLen := 0
+	for _, row := range data {
+		totalLen += len(row)
+	}
+
+	// Construct the raw slice header
+	return *(*[]float32)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(ptr),
+		Len:  totalLen,
+		Cap:  totalLen,
+	}))
+}
+
+type Pair struct {
+	Distance float32
+	Label    int32
+}
+
+type KNNQueryResponse struct {
+	K         uint
+	Count     uint
+	Distances []Pair
+}
+
+func (h *HNSWIndex) Query(queryEmbeddings [][]float32, k uint64, queryOpts ...QueryOption) (*HNSWIndexQueryResult, error) {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
+	query := &HNSWIndexQuery{
+		k:  k,
+		ef: h.config.EfSearch,
+	}
+
+	myFilter := func(label int) bool {
+		return label > 0
+	}
+	currentFilter = myFilter
+
+	rawSlice := toRawSlice(queryEmbeddings)
+
+	embeddings := (*C.float)(unsafe.Pointer(&rawSlice[0]))
+
+	var req *C.KNNQueryRequest = C.create_knn_query_request(embeddings, C.size_t(k), 1, C.size_t(len(queryEmbeddings)), C.size_t(len(queryEmbeddings[0])), (C.FilterFunction)(C.goFilterWrapper))
+	defer C.free_knn_query_request(req)
+	var resp *C.KNNQueryResponse = C.create_knn_query_response(C.size_t(1), C.size_t(1))
+	defer C.free_knn_query_response(resp)
+	C.knn_query(h.index, req, resp)
+	fmt.Println(req, query, resp)
+	fmt.Println(C.testFilter(req, 11))
+	unpackedResponse := unpackKNNQueryResponse(resp)
+	fmt.Printf("Response: %+v\n", unpackedResponse)
+	runtime.KeepAlive(myFilter)
+	_ = req
+	return nil, nil
+
+}
+
+func unpackKNNQueryResponse(cResponse *C.KNNQueryResponse) KNNQueryResponse {
+	k := uint(cResponse.k)
+	count := uint(cResponse.count)
+
+	// Create a Go slice from the C array
+	cDistances := unsafe.Slice(cResponse.distances, k*count)
+	distances := make([]Pair, len(cDistances))
+	for i, cDist := range cDistances {
+		var cdist C.Pair = cDist
+		distances[i] = Pair{
+			Distance: float32(cdist.distance), // Use actual field names here
+			Label:    int32(cdist.label),      // Use actual field names here
+		}
+	}
+
+	return KNNQueryResponse{
+		K:         k,
+		Count:     count,
+		Distances: distances,
+	}
+}
+
+func (r *KNNQueryResponse) String() string {
+	return fmt.Sprintf("K: %d, Count: %d, Distances: %v", r.K, r.Count, r.Distances)
+}
+
+func (h *HNSWIndex) GetData(ids []uint64) ([][]float32, error) {
+	if !h.initialized {
+		C.init_index(h.index)
+		h.initialized = true
+	}
+	idsCount := len(ids)
+	if idsCount == 0 {
+		return nil, nil
+	}
+
+	// Convert Go slice to C array
+	cIds := (*C.label_type)(C.malloc(C.size_t(idsCount) * C.size_t(unsafe.Sizeof(C.label_type(0)))))
+	defer C.free(unsafe.Pointer(cIds))
+	for i, id := range ids {
+		(*(*[1 << 30]C.label_type)(unsafe.Pointer(cIds)))[i] = C.label_type(id)
+	}
+
+	// Get vector dimension from the HNSW index
+	var outputDims C.size_t
+	var outputItems C.size_t
+
+	// Pre-allocate output buffer
+	maxDim := h.config.Dimension // Assume a method to get vector dimensions
+	outputData := (*C.float)(C.malloc(C.size_t(idsCount) * C.size_t(maxDim) * C.size_t(unsafe.Sizeof(C.float(0)))))
+	defer C.free(unsafe.Pointer(outputData))
+
+	// Call the C function
+	C.get_items_by_ids(
+		h.index,
+		cIds,
+		C.size_t(idsCount),
+		outputData,
+		&outputItems,
+		&outputDims,
+	)
+
+	// Convert C array to Go slice
+	goData := make([][]float32, int(outputItems))
+	cData := (*[1 << 30]C.float)(unsafe.Pointer(outputData))[: idsCount*int(outputDims) : idsCount*int(outputDims)]
+	for i := 0; i < int(outputItems); i++ {
+		goData[i] = make([]float32, int(outputDims))
+		for j := 0; j < int(outputDims); j++ {
+			goData[i][j] = float32(cData[i*int(outputDims)+j])
+		}
+	}
+
+	fmt.Println(goData)
+
+	return goData, nil
 }
